@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(chmod:*)",
+      "Bash(build.bat:*)",
+      "Bash(nm lib/DetourCrowd.lib)",
+      "Bash(nm lib/Recast.lib)",
+      "Bash(cmd.exe /c \"C:\\Python37\\python.exe -m pip install pybind11\")",
+      "Bash(cmd.exe /c \"C:\\Python37\\python.exe --version\")",
+      "Bash(cmd.exe /c \"C:\\Python37\\python.exe -c \"\"import pybind11; print(''PyBind11:'', pybind11.__version__)\"\"\")",
+      "Bash(\"E:\\Cave\\Espion\\Libs\\PyRecastDetour-Sources-main\\build_msvc.bat\")",
+      "Bash(C:Python37python.exe -m ensurepip --default-pip)",
+      "Bash(C:Python37python.exe:*)",
+      "Bash(cmd.exe /c \"C:\\Python37\\python.exe E:\\Cave\\Espion\\Libs\\PyRecastDetour-Sources-main\\setup_py37.py\")",
+      "Bash(venv37Scriptspip.exe install:*)",
+      "Bash(cmd.exe /c \"E:\\Cave\\Espion\\Libs\\PyRecastDetour-Sources-main\\venv37\\Scripts\\pip.exe install pybind11\")",
+      "Bash(cmd.exe /c \"E:\\Cave\\Espion\\Libs\\PyRecastDetour-Sources-main\\venv37\\Scripts\\python.exe -c \"\"import pybind11; print(''PyBind11:'', pybind11.__version__)\"\"\")",
+      "Bash(\"E:/Cave/Espion/Libs/PyRecastDetour-Sources-main/venv37/Scripts/python.exe\":*)",
+      "Bash(\"E:/Cave/Espion/Libs/PyRecastDetour-Sources-main/venv37/Scripts/pip.exe\" install \"pybind11==2.13.6\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,52 @@
+PyRecastDetour - Installation Rapide
+=====================================
+
+ÉTAPE 1: Vérifier le Contenu
+-----------------------------
+Ce dossier doit contenir:
+- __init__.py
+- example.py
+- README.md
+- Py310RecastDetour*.pyd (ou .so sur Linux/Mac)
+
+Si le fichier .pyd/.so est manquant, retournez au dossier parent
+et lancez le script de build:
+  Windows: build_msvc.bat
+  Linux/Mac: ./build.sh
+
+
+ÉTAPE 2: Installation
+----------------------
+Option A - Copier dans votre projet:
+  Copiez ce dossier entier dans votre projet Python
+
+Option B - PYTHONPATH:
+  export PYTHONPATH=$PYTHONPATH:/chemin/vers/dist
+
+Option C - Site-packages:
+  Copiez dans votre dossier site-packages Python
+
+
+ÉTAPE 3: Test
+-------------
+python example.py
+
+Ou testez l'import:
+python -c "from PyRecastDetour import Navmesh; print('OK')"
+
+
+DOCUMENTATION
+-------------
+- README.md (dans ce dossier)
+- PYTHON_API.md (dossier parent)
+- QUICK_START.md (dossier parent)
+
+
+SUPPORT
+-------
+En cas de problème, consultez:
+- BUILD_INSTRUCTIONS.md pour problèmes de compilation
+- PYTHON_API.md pour utilisation
+- example.py pour exemples de code
+
+GitHub: https://github.com/Tugcga/PyRecastDetour

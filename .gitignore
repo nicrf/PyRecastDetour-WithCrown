@@ -1,0 +1,113 @@
+# Build directories
+build/
+build_msvc/
+build_mingw/
+cmake-build-*/
+*.dir/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.egg-info/
+dist/*.pyd
+dist/*.so
+*.egg
+.eggs/
+venv/
+venv37/
+venv*/
+env/
+ENV/
+.Python
+
+# PyBind11 source (downloaded dependency)
+pybind11_src/
+pybind11.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Compiled Object files
+*.o
+*.obj
+*.lo
+*.slo
+*.ko
+*.elf
+
+# Compiled Dynamic libraries
+*.dll
+*.dylib
+
+# Compiled Static libraries
+*.lib
+*.a
+*.la
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Logs
+*.log
+cave_debug.log
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.cache
+py37_paths.txt
+get-pip.py
+
+# Test outputs
+test_*.txt
+test_*.py
+/tmp/
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+nul
+NUL
+
+# Distribution / packaging
+*.tar.gz
+*.zip
+!pybind11-*.zip
+
+# Documentation build
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Navigation mesh data
+*.bin
+*.obj
+!example*.obj
+
+# Temporary build scripts
+create_python37_lib.bat
+gen_lib.bat
+install_pybind11.bat
+setup_py37.py
+setup_py37_paths.py
