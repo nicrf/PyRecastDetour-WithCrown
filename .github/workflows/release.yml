@@ -1,0 +1,83 @@
+name: Create Release with Dist
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v1.1.0, etc.
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create dist archive
+        run: |
+          Compress-Archive -Path dist/* -DestinationPath PyRecastDetour-dist.zip
+        shell: pwsh
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          $VERSION = $env:GITHUB_REF -replace 'refs/tags/', ''
+          echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: PyRecastDetour ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            # PyRecastDetour for Cave Engine ${{ steps.get_version.outputs.VERSION }}
+
+            ## Installation
+
+            1. Download `PyRecastDetour-dist.zip`
+            2. Extract to your Cave Engine project
+            3. Import in Python:
+            ```python
+            import sys
+            sys.path.append("path/to/PyRecastDetour/dist")
+            from PyRecastDetour import Navmesh, create_default_agent_params
+            ```
+
+            ## What's Included
+
+            - Pre-built Python 3.7 module (.pyd)
+            - All source Python wrapper files
+            - Example code (example.py)
+            - Complete API with 80+ functions
+
+            ## Features
+
+            - ✅ Navigation mesh building
+            - ✅ Pathfinding (straight, batch, raycast)
+            - ✅ Crowd simulation (100+ agents)
+            - ✅ Convex volumes (water, roads, danger zones)
+            - ✅ Off-mesh connections (jumps, ladders)
+            - ✅ Formations (line, wedge, circle, box)
+            - ✅ Advanced query filters
+
+            ## Documentation
+
+            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for complete documentation.
+
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./PyRecastDetour-dist.zip
+          asset_name: PyRecastDetour-dist.zip
+          asset_content_type: application/zip
