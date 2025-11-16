@@ -1,8 +1,8 @@
 """
 PyRecastDetour - Python bindings for Recast Navigation library
 
-This module provides navmesh generation, pathfinding, and crowd simulation
-capabilities using the Recast Navigation C++ library.
+This module provides navmesh generation, pathfinding, crowd simulation,
+and advanced navigation features using the Recast Navigation C++ library.
 
 Example usage:
     from PyRecastDetour import Navmesh
@@ -19,7 +19,12 @@ Example usage:
     navmesh.init_crowd(maxAgents=100, maxAgentRadius=1.0)
 
     # Add agents
-    agent_params = create_default_agent_params()
+    agent_params = {
+        "radius": 0.5,
+        "height": 2.0,
+        "maxSpeed": 3.5,
+        "maxAcceleration": 8.0
+    }
     agent_id = navmesh.add_agent((5, 0, 5), agent_params)
 
     # Set target and update
@@ -31,26 +36,17 @@ Example usage:
     vel = navmesh.get_agent_velocity(agent_id)
 """
 
-import sys
 import os
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Dict, Optional, Any
 
-if sys.version_info[0] == 2:
-    import Py2RecastDetour as rd
-else:
-    if sys.version_info[1] == 6:
-        from . import Py36RecastDetour as rd
-    elif sys.version_info[1] == 7:
-        from . import Py37RecastDetour as rd
-    elif sys.version_info[1] == 8:
-        from . import Py38RecastDetour as rd
-    elif sys.version_info[1] == 9:
-        from . import Py39RecastDetour as rd
-    else:
-        from . import Py310RecastDetour as rd  # type: ignore
+# Import the appropriate compiled module based on Python version
+import Py37RecastDetour as rd
 
+# ============================================================================
+# CONSTANTS
+# ============================================================================
 
-# Crowd update flags constants
+# Crowd update flags
 CROWD_ANTICIPATE_TURNS = 1
 CROWD_OBSTACLE_AVOIDANCE = 2
 CROWD_SEPARATION = 4
@@ -76,31 +72,53 @@ PARTITION_WATERSHED = 0
 PARTITION_MONOTONE = 1
 PARTITION_LAYERS = 2
 
+# Poly Area Types - for marking different terrain types
+POLYAREA_GROUND = 0      # Normal walkable ground
+POLYAREA_WATER = 1       # Water (swimming required)
+POLYAREA_ROAD = 2        # Roads (preferred path, lower cost)
+POLYAREA_DOOR = 3        # Doors (can be opened/closed)
+POLYAREA_GRASS = 4       # Grass (slower movement)
+POLYAREA_JUMP = 5        # Jump connections
+POLYAREA_CLIMB = 6       # Climbable surfaces
+POLYAREA_DANGER = 7      # Dangerous areas (high cost)
 
-def create_default_agent_params() -> Dict[str, Any]:
+# Poly Flags - capabilities of each polygon
+POLYFLAGS_WALK = 0x01       # Ability to walk (ground travel)
+POLYFLAGS_SWIM = 0x02       # Ability to swim (water travel)
+POLYFLAGS_DOOR = 0x04       # Ability to move through doors
+POLYFLAGS_JUMP = 0x08       # Ability to jump
+POLYFLAGS_CLIMB = 0x10      # Ability to climb
+POLYFLAGS_DISABLED = 0x20   # Disabled polygon
+POLYFLAGS_ALL = 0xFFFF      # All abilities
+
+# Formation types
+FORMATION_LINE = 0          # Horizontal line formation
+FORMATION_COLUMN = 1        # Vertical column formation
+FORMATION_WEDGE = 2         # V-shaped wedge formation
+FORMATION_BOX = 3           # Rectangular box/grid formation
+FORMATION_CIRCLE = 4        # Circular formation
+
+# ============================================================================
+# NAVMESH WRAPPER CLASS
+# ============================================================================
+
+class Navmesh:
     """
-    Create a dictionary with default agent parameters.
+    Python wrapper for Recast Navigation navmesh with type conversion and validation.
 
-    Returns:
-        dict: Default agent parameters for crowd simulation
+    This class wraps the C++ Navmesh class and provides:
+    - Type conversions between Python tuples and C++ vectors
+    - Input validation and error messages
+    - Pythonic API with type hints
     """
-    return {
-        "radius": 0.6,
-        "height": 2.0,
-        "maxAcceleration": 8.0,
-        "maxSpeed": 3.5,
-        "collisionQueryRange": 7.2,  # radius * 12
-        "pathOptimizationRange": 18.0,  # radius * 30
-        "separationWeight": 2.0,
-        "updateFlags": CROWD_ANTICIPATE_TURNS | CROWD_OPTIMIZE_VIS | CROWD_OPTIMIZE_TOPO | CROWD_OBSTACLE_AVOIDANCE,
-        "obstacleAvoidanceType": 3,
-        "queryFilterType": 0
-    }
 
-
-class Navmesh():
     def __init__(self) -> None:
+        """Initialize a new Navmesh instance."""
         self._navmesh = rd.Navmesh()
+
+    # ========================================================================
+    # INITIALIZATION & BUILDING
+    # ========================================================================
 
     def init_by_obj(self, file_path: str) -> None:
         '''Initialize geomery by reading *.obj file
@@ -147,6 +165,92 @@ class Navmesh():
             string with log messages
         '''
         return self._navmesh.get_log()
+
+    # ========================================================================
+    # SETTINGS
+    # ========================================================================
+
+    def get_settings(self) -> Dict[str, Any]:
+        '''Return current setting, which will be used for building navmesh
+
+        Output:
+            dictionary with the following keys:
+                cellSize - cell size in world units
+                cellHeight - cell height in world units
+                agentHeight - agent height in world units
+                agentRadius - agent radius in world units
+                agentMaxClimb - agent max climb in world units
+                agentMaxSlope - agent max slope in degrees
+                regionMinSize - region minimum size in voxels
+                regionMergeSize - region merge size in voxels
+                edgeMaxLen - eEdge max length in world units
+                edgeMaxError - edge max error in voxels
+                vertsPerPoly - the maximum number of vertices in each polygon
+                detailSampleDist - detail sample distance in voxels
+                detailSampleMaxError - detail sample max error in voxel heights
+        '''
+        return self._navmesh.get_settings()
+
+    def set_settings(self, settings: Dict[str, Any]) -> None:
+        '''Set settings for building navmesh
+
+        Input:
+            settings - dictionary with the following keys:
+                cellSize - cell size in world units, should be >= 0.0001
+                cellHeight - cell height in world units, should be >= 0.0001
+                agentHeight - agent height in world units, should be >= 0.0
+                agentRadius - agent radius in world units, should be >= 0.0
+                agentMaxClimb - agent max climb in world units
+                agentMaxSlope - agent max slope in degrees
+                regionMinSize - region minimum size in voxels
+                regionMergeSize - region merge size in voxels
+                edgeMaxLen - eEdge max length in world units
+                edgeMaxError - edge max error in voxels
+                vertsPerPoly - the maximum number of vertices in each polygon, should be integer from 3 to 6
+                detailSampleDist - detail sample distance in voxels
+                detailSampleMaxError - detail sample max error in voxel heights
+        '''
+        self._navmesh.set_settings(settings)
+
+    def get_partition_type(self) -> int:
+        '''Retrun the index of the partition type, which used for generating polygons in the navmesh
+
+        Output:
+            one integer from 0 to 2
+                0 - SAMPLE_PARTITION_WATERSHED
+                1 - SAMPLE_PARTITION_MONOTONE
+                2 - SAMPLE_PARTITION_LAYERS
+        '''
+        return self._navmesh.get_partition_type()
+
+    def set_partition_type(self, type: int) -> None:
+        '''Set partition type for generation navmesh
+
+        Input:
+            type - integer from 0 to 2
+                0 - SAMPLE_PARTITION_WATERSHED
+                1 - SAMPLE_PARTITION_MONOTONE
+                2 - SAMPLE_PARTITION_LAYERS
+        '''
+        self._navmesh.set_partition_type(type)
+
+    def get_bounding_box(self) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
+        '''Return bounding box of the mesh
+
+        Output:
+            tuple in the form (b_min, b_max), where
+                b_min is a triple (x, y, z) with the lowerest corner of the bounding box
+                b_max is a triple (x, y, z) with the highest corner of the bounding box
+        '''
+        b = self._navmesh.get_bounding_box()
+        if len(b) == 6:
+            return ((b[0], b[1], b[2]), (b[3], b[4], b[5]))
+        else:
+            return None
+
+    # ========================================================================
+    # PATHFINDING
+    # ========================================================================
 
     def pathfind_straight(self, start: Tuple[float, float, float], end: Tuple[float, float, float], vertex_mode: int = 0) -> Optional[List[Tuple[float, float, float]]]:
         '''Return the shortest path between start and end point inside generated navmesh.
@@ -260,83 +364,9 @@ class Navmesh():
             print("Fails to hit mesh. Start and end should be triples")
             return None
 
-    def get_settings(self) -> Dict[str, Any]:
-        '''Return current setting, which will be used for building navmesh
-
-        Output:
-            dictionary with the following keys:
-                cellSize - cell size in world units
-                cellHeight - cell height in world units
-                agentHeight - agent height in world units
-                agentRadius - agent radius in world units
-                agentMaxClimb - agent max climb in world units
-                agentMaxSlope - agent max slope in degrees
-                regionMinSize - region minimum size in voxels
-                regionMergeSize - region merge size in voxels
-                edgeMaxLen - eEdge max length in world units
-                edgeMaxError - edge max error in voxels
-                vertsPerPoly - the maximum number of vertices in each polygon
-                detailSampleDist - detail sample distance in voxels
-                detailSampleMaxError - detail sample max error in voxel heights
-        '''
-        return self._navmesh.get_settings()
-
-    def set_settings(self, settings: Dict[str, Any]) -> None:
-        '''Set settings for building navmesh
-
-        Input:
-            settings - dictionary with the following keys:
-                cellSize - cell size in world units, should be >= 0.0001
-                cellHeight - cell height in world units, should be >= 0.0001
-                agentHeight - agent height in world units, should be >= 0.0
-                agentRadius - agent radius in world units, should be >= 0.0
-                agentMaxClimb - agent max climb in world units
-                agentMaxSlope - agent max slope in degrees
-                regionMinSize - region minimum size in voxels
-                regionMergeSize - region merge size in voxels
-                edgeMaxLen - eEdge max length in world units
-                edgeMaxError - edge max error in voxels
-                vertsPerPoly - the maximum number of vertices in each polygon, should be integer from 3 to 6
-                detailSampleDist - detail sample distance in voxels
-                detailSampleMaxError - detail sample max error in voxel heights
-        '''
-        self._navmesh.set_settings(settings)
-
-    def get_partition_type(self) -> int:
-        '''Retrun the index of the partition type, which used for generating polygons in the navmesh
-
-        Output:
-            one integer from 0 to 2
-                0 - SAMPLE_PARTITION_WATERSHED
-                1 - SAMPLE_PARTITION_MONOTONE
-                2 - SAMPLE_PARTITION_LAYERS
-        '''
-        return self._navmesh.get_partition_type()
-
-    def set_partition_type(self, type: int) -> None:
-        '''Set partition type for generation navmesh
-
-        Input:
-            type - integer from 0 to 2
-                0 - SAMPLE_PARTITION_WATERSHED
-                1 - SAMPLE_PARTITION_MONOTONE
-                2 - SAMPLE_PARTITION_LAYERS
-        '''
-        self._navmesh.set_partition_type(type)
-
-    def get_bounding_box(self) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
-        '''Return bounding box of the mesh
-
-        Output:
-            tuple in the form (b_min, b_max), where
-                b_min is a triple (x, y, z) with the lowerest corner of the bounding box
-                b_max is a triple (x, y, z) with the highest corner of the bounding box
-        '''
-        b = self._navmesh.get_bounding_box()
-        if len(b) == 6:
-            return ((b[0], b[1], b[2]), (b[3], b[4], b[5]))
-        else:
-            return None
+    # ========================================================================
+    # SERIALIZATION
+    # ========================================================================
 
     def save_navmesh(self, file_path: str) -> None:
         '''Save generated navmesh to the bindary firle with extension *.bin
@@ -346,22 +376,13 @@ class Navmesh():
         '''
         self._navmesh.save_navmesh(file_path)
 
-    def _generate_plane(self, plane_size: float) -> Tuple[List[float], List[int]]:
-        '''Internal function, generate geometry data for simple plane
-        '''
-        plane_verts: List[float] = [plane_size, 0.0, plane_size,
-                                    -plane_size, 0.0, plane_size,
-                                    -plane_size, 0.0, -plane_size,
-                                    plane_size, 0.0, -plane_size]
-        plane_polys: List[int] = [4, 0, 3, 2, 1]
-        return (plane_verts, plane_polys)
-
     def load_navmesh(self, file_path: str) -> None:
-        '''Load navmesh from *.bin file
+        """
+        Load navmesh from *.bin file
 
         Input:
             file_path - path to the file with extension *.bin
-        '''
+        """
         if os.path.exists(file_path):
             # clear generated navmesh and load simple plane
             # by default we will use the size 4.0
@@ -377,6 +398,10 @@ class Navmesh():
             self._navmesh.load_navmesh(file_path)
         else:
             print("Fails to load navmesh. The file " + file_path + " does not exist")
+
+    # ========================================================================
+    # MESH EXPORT
+    # ========================================================================
 
     def get_navmesh_trianglulation(self) -> Tuple[List[float], List[int]]:
         '''Return triangulation data of the generated navmesh
@@ -400,181 +425,924 @@ class Navmesh():
         return self._navmesh.get_navmesh_polygonization()
 
     # ========================================================================
-    # Crowd and Agent Management Methods
+    # SERIALIZATION - HELPER
+    # ========================================================================
+
+    def _generate_plane(self, plane_size: float) -> Tuple[List[float], List[int]]:
+        """Internal function, generate geometry data for simple plane"""
+        plane_verts: List[float] = [plane_size, 0.0, plane_size,
+                                    -plane_size, 0.0, plane_size,
+                                    -plane_size, 0.0, -plane_size,
+                                    plane_size, 0.0, -plane_size]
+        plane_polys: List[int] = [4, 0, 3, 2, 1]
+        return (plane_verts, plane_polys)
+
+    # ========================================================================
+    # CROWD SIMULATION
     # ========================================================================
 
     def init_crowd(self, maxAgents: int, maxAgentRadius: float) -> bool:
-        '''Initialize the crowd simulation system.
+        """
+        Initialize crowd simulation system.
 
-        Input:
-            maxAgents - maximum number of agents that can be managed
-            maxAgentRadius - maximum radius of any agent in the crowd
+        Args:
+            maxAgents: Maximum number of agents
+            maxAgentRadius: Maximum agent radius
 
-        Output:
-            True if initialization successful, False otherwise
-        '''
+        Returns:
+            True if successful
+        """
         return self._navmesh.init_crowd(maxAgents, maxAgentRadius)
 
     def add_agent(self, pos: Tuple[float, float, float], params: Dict[str, Any]) -> int:
-        '''Add an agent to the crowd.
+        """
+        Add agent to crowd.
 
-        Input:
-            pos - initial position as tuple (x, y, z)
-            params - dictionary with agent parameters:
-                radius - agent radius
-                height - agent height
-                maxAcceleration - maximum acceleration
-                maxSpeed - maximum speed
-                collisionQueryRange - collision detection range
-                pathOptimizationRange - path optimization range
-                separationWeight - separation weight for crowd separation
-                updateFlags - behavior flags (use CROWD_* constants)
-                obstacleAvoidanceType - obstacle avoidance quality [0-3]
-                queryFilterType - navigation query filter type
+        Args:
+            pos: Initial position (x, y, z)
+            params: Agent parameters dictionary
 
-        Output:
-            agent ID (integer >= 0) if successful, -1 if failed
-        '''
-        if len(pos) != 3:
-            print("Fail to add agent. Position should be a triple (x, y, z)")
-            return -1
+        Returns:
+            Agent index, or -1 on failure
+        """
         return self._navmesh.add_agent(list(pos), params)
 
     def remove_agent(self, idx: int) -> None:
-        '''Remove an agent from the crowd.
-
-        Input:
-            idx - agent ID returned by add_agent()
-        '''
+        """Remove agent from crowd."""
         self._navmesh.remove_agent(idx)
 
-    def update_crowd(self, dt: float) -> None:
-        '''Update the crowd simulation.
-
-        Input:
-            dt - time step in seconds (e.g., 0.016 for 60 FPS)
-        '''
-        self._navmesh.update_crowd(dt)
-
-    def set_agent_target(self, idx: int, pos: Tuple[float, float, float]) -> bool:
-        '''Set movement target for an agent.
-
-        Input:
-            idx - agent ID
-            pos - target position as tuple (x, y, z)
-
-        Output:
-            True if successful, False otherwise
-        '''
-        if len(pos) != 3:
-            print("Fail to set agent target. Position should be a triple (x, y, z)")
-            return False
-        return self._navmesh.set_agent_target(idx, list(pos))
-
-    def set_agent_velocity(self, idx: int, vel: Tuple[float, float, float]) -> bool:
-        '''Set velocity for an agent (manual control).
-
-        Input:
-            idx - agent ID
-            vel - velocity as tuple (vx, vy, vz)
-
-        Output:
-            True if successful, False otherwise
-        '''
-        if len(vel) != 3:
-            print("Fail to set agent velocity. Velocity should be a triple (vx, vy, vz)")
-            return False
-        return self._navmesh.set_agent_velocity(idx, list(vel))
-
-    def reset_agent_target(self, idx: int) -> bool:
-        '''Reset/cancel the movement target for an agent.
-
-        Input:
-            idx - agent ID
-
-        Output:
-            True if successful, False otherwise
-        '''
-        return self._navmesh.reset_agent_target(idx)
-
-    def get_agent_position(self, idx: int) -> Optional[Tuple[float, float, float]]:
-        '''Get current position of an agent.
-
-        Input:
-            idx - agent ID
-
-        Output:
-            position as tuple (x, y, z) or None if failed
-        '''
-        pos = self._navmesh.get_agent_position(idx)
-        if len(pos) == 3:
-            return (pos[0], pos[1], pos[2])
-        return None
-
-    def get_agent_velocity(self, idx: int) -> Optional[Tuple[float, float, float]]:
-        '''Get current velocity of an agent.
-
-        Input:
-            idx - agent ID
-
-        Output:
-            velocity as tuple (vx, vy, vz) or None if failed
-        '''
-        vel = self._navmesh.get_agent_velocity(idx)
-        if len(vel) == 3:
-            return (vel[0], vel[1], vel[2])
-        return None
-
-    def get_agent_state(self, idx: int) -> Optional[Dict[str, float]]:
-        '''Get complete state information for an agent.
-
-        Input:
-            idx - agent ID
-
-        Output:
-            dictionary with agent state information:
-                active - 1.0 if agent is active, 0.0 otherwise
-                state - agent state (use CROWDAGENT_STATE_* constants)
-                targetState - target request state (use CROWDAGENT_TARGET_* constants)
-                position_x, position_y, position_z - current position
-                velocity_x, velocity_y, velocity_z - current velocity
-                desiredVelocity_x, desiredVelocity_y, desiredVelocity_z - desired velocity
-                cornerVerts_x, cornerVerts_y, cornerVerts_z - next corner position
-                ncorners - number of corners in current path
-                ... and other internal state values
-            Returns None if agent not found
-        '''
-        return self._navmesh.get_agent_state(idx)
-
-    def get_agent_count(self) -> int:
-        '''Get the current number of active agents in the crowd.
-
-        Output:
-            number of active agents
-        '''
-        return self._navmesh.get_agent_count()
-
     def update_agent_parameters(self, idx: int, params: Dict[str, Any]) -> None:
-        '''Update parameters of an existing agent.
+        """
+        Update agent parameters at runtime.
 
-        Input:
-            idx - agent ID
-            params - dictionary with agent parameters to update (same as add_agent)
-        '''
+        Args:
+            idx: Agent index
+            params: Parameters to update
+        """
         self._navmesh.update_agent_parameters(idx, params)
 
+    def set_agent_target(self, idx: int, pos: Tuple[float, float, float]) -> bool:
+        """
+        Set agent's navigation target.
+
+        Args:
+            idx: Agent index
+            pos: Target position (x, y, z)
+
+        Returns:
+            True if successful
+        """
+        return self._navmesh.set_agent_target(idx, list(pos))
+
+    def set_agent_velocity(self, idx: int, vel: Tuple[float, float, float]) -> None:
+        """
+        Set agent's velocity directly.
+
+        Args:
+            idx: Agent index
+            vel: Velocity vector (x, y, z)
+        """
+        self._navmesh.set_agent_velocity(idx, list(vel))
+
+    def reset_agent_target(self, idx: int) -> None:
+        """Clear agent's current target."""
+        self._navmesh.reset_agent_target(idx)
+
+    def update_crowd(self, dt: float) -> None:
+        """
+        Update crowd simulation.
+
+        Args:
+            dt: Delta time in seconds
+        """
+        self._navmesh.update_crowd(dt)
+
+    def get_agent_position(self, idx: int) -> Tuple[float, float, float]:
+        """
+        Get agent's current position.
+
+        Args:
+            idx: Agent index
+
+        Returns:
+            Position as (x, y, z)
+        """
+        pos = self._navmesh.get_agent_position(idx)
+        return (pos[0], pos[1], pos[2])
+
+    def get_agent_velocity(self, idx: int) -> Tuple[float, float, float]:
+        """
+        Get agent's current velocity.
+
+        Args:
+            idx: Agent index
+
+        Returns:
+            Velocity as (x, y, z)
+        """
+        vel = self._navmesh.get_agent_velocity(idx)
+        return (vel[0], vel[1], vel[2])
+
+    def get_agent_count(self) -> int:
+        """Get total number of agents in crowd."""
+        return self._navmesh.get_agent_count()
+
+    def get_agent_state(self, idx: int) -> Dict[str, Any]:
+        """
+        Get complete agent state.
+
+        Args:
+            idx: Agent index
+
+        Returns:
+            Dictionary with agent state information
+        """
+        return self._navmesh.get_agent_state(idx)
+
+    # ========================================================================
+    # CONVEX VOLUMES (NEW v1.1.0)
+    # ========================================================================
+
+    def add_convex_volume(
+        self,
+        verts: List[float],
+        minh: float,
+        maxh: float,
+        area: int
+    ) -> None:
+        """
+        Add convex volume for area marking.
+
+        Args:
+            verts: Flat list of vertices [x1,y1,z1, x2,y2,z2, ...] (3-12 vertices)
+            minh: Minimum height
+            maxh: Maximum height
+            area: Area type (POLYAREA_*)
+
+        Example:
+            # Water zone (rectangular)
+            verts = [10,0,10, 20,0,10, 20,0,20, 10,0,20]
+            navmesh.add_convex_volume(verts, 0.0, 2.0, POLYAREA_WATER)
+        """
+        self._navmesh.add_convex_volume(verts, minh, maxh, area)
+
+    def delete_convex_volume(self, index: int) -> None:
+        """
+        Delete convex volume by index.
+
+        Args:
+            index: Volume index
+        """
+        self._navmesh.delete_convex_volume(index)
+
+    def get_convex_volume_count(self) -> int:
+        """
+        Get number of convex volumes.
+
+        Returns:
+            Volume count
+        """
+        return self._navmesh.get_convex_volume_count()
+
+    def get_convex_volume(self, index: int) -> Dict[str, Any]:
+        """
+        Get convex volume information.
+
+        Args:
+            index: Volume index
+
+        Returns:
+            Dictionary with 'verts', 'hmin', 'hmax', 'area'
+        """
+        return self._navmesh.get_convex_volume(index)
+
+    def get_all_convex_volumes(self) -> List[Dict[str, Any]]:
+        """
+        Get all convex volumes.
+
+        Returns:
+            List of volume dictionaries
+        """
+        return self._navmesh.get_all_convex_volumes()
+
+    # ========================================================================
+    # OFF-MESH CONNECTIONS (NEW v1.1.0)
+    # ========================================================================
+
+    def add_offmesh_connection(
+        self,
+        start_pos: Tuple[float, float, float],
+        end_pos: Tuple[float, float, float],
+        radius: float,
+        bidirectional: bool,
+        area: int,
+        flags: int
+    ) -> None:
+        """
+        Add off-mesh connection (jump, ladder, teleport, etc).
+
+        Args:
+            start_pos: Start position (x, y, z)
+            end_pos: End position (x, y, z)
+            radius: Connection radius
+            bidirectional: True for two-way connections
+            area: Area type (POLYAREA_*)
+            flags: Capability flags (POLYFLAGS_*)
+
+        Example:
+            # Jump connection (one-way)
+            navmesh.add_offmesh_connection(
+                (5, 2, 5), (10, 3, 10),
+                radius=0.5, bidirectional=False,
+                area=POLYAREA_JUMP, flags=POLYFLAGS_JUMP
+            )
+        """
+        self._navmesh.add_offmesh_connection(
+            list(start_pos), list(end_pos),
+            radius, bidirectional, area, flags
+        )
+
+    def delete_offmesh_connection(self, index: int) -> None:
+        """
+        Delete off-mesh connection by index.
+
+        Args:
+            index: Connection index
+        """
+        self._navmesh.delete_offmesh_connection(index)
+
+    def get_offmesh_connection_count(self) -> int:
+        """
+        Get number of off-mesh connections.
+
+        Returns:
+            Connection count
+        """
+        return self._navmesh.get_offmesh_connection_count()
+
+    def get_offmesh_connection(self, index: int) -> Dict[str, Any]:
+        """
+        Get off-mesh connection information.
+
+        Args:
+            index: Connection index
+
+        Returns:
+            Dictionary with connection details
+        """
+        return self._navmesh.get_offmesh_connection(index)
+
+    def get_all_offmesh_connections(self) -> List[Dict[str, Any]]:
+        """
+        Get all off-mesh connections.
+
+        Returns:
+            List of connection dictionaries
+        """
+        return self._navmesh.get_all_offmesh_connections()
+
+    # ========================================================================
+    # AUTO-MARKUP SYSTEM (NEW v1.1.0)
+    # ========================================================================
+
+    def mark_walkable_triangles(self, walkable_slope_angle: float) -> None:
+        """
+        Mark walkable triangles based on slope angle.
+
+        Args:
+            walkable_slope_angle: Maximum walkable slope in degrees
+        """
+        self._navmesh.mark_walkable_triangles(walkable_slope_angle)
+
+    def mark_box_area(
+        self,
+        bmin: Tuple[float, float, float],
+        bmax: Tuple[float, float, float],
+        area_id: int
+    ) -> None:
+        """
+        Mark box-shaped area.
+
+        Args:
+            bmin: Minimum bounds (x, y, z)
+            bmax: Maximum bounds (x, y, z)
+            area_id: Area type (POLYAREA_*)
+
+        Example:
+            # Road
+            navmesh.mark_box_area((0,0,0), (100,1,5), POLYAREA_ROAD)
+        """
+        self._navmesh.mark_box_area(list(bmin), list(bmax), area_id)
+
+    def mark_cylinder_area(
+        self,
+        pos: Tuple[float, float, float],
+        radius: float,
+        height: float,
+        area_id: int
+    ) -> None:
+        """
+        Mark cylindrical area.
+
+        Args:
+            pos: Center position (x, y, z)
+            radius: Cylinder radius
+            height: Cylinder height
+            area_id: Area type (POLYAREA_*)
+
+        Example:
+            # Water pond
+            navmesh.mark_cylinder_area((25,0,25), 10.0, 2.0, POLYAREA_WATER)
+        """
+        self._navmesh.mark_cylinder_area(list(pos), radius, height, area_id)
+
+    def mark_convex_poly_area(
+        self,
+        verts: List[float],
+        hmin: float,
+        hmax: float,
+        area_id: int
+    ) -> None:
+        """
+        Mark convex polygon area.
+
+        Args:
+            verts: Flat list of vertices [x1,y1,z1, x2,y2,z2, ...]
+            hmin: Minimum height
+            hmax: Maximum height
+            area_id: Area type (POLYAREA_*)
+        """
+        self._navmesh.mark_convex_poly_area(verts, hmin, hmax, area_id)
+
+    def erode_walkable_area(self, radius: int) -> None:
+        """
+        Erode walkable area by radius.
+
+        Args:
+            radius: Erosion radius in cells
+        """
+        self._navmesh.erode_walkable_area(radius)
+
+    def median_filter_walkable_area(self) -> None:
+        """Apply median filter to walkable area for smoothing."""
+        self._navmesh.median_filter_walkable_area()
+
+    # ========================================================================
+    # ADVANCED CROWD FEATURES (NEW v1.1.0)
+    # ========================================================================
+
+    def set_obstacle_avoidance_params(self, idx: int, params: Dict[str, float]) -> None:
+        """
+        Set obstacle avoidance parameters for profile.
+
+        Args:
+            idx: Profile index (0-7)
+            params: Avoidance parameters dictionary
+
+        Example:
+            params = create_obstacle_avoidance_params("aggressive")
+            navmesh.set_obstacle_avoidance_params(0, params)
+        """
+        self._navmesh.set_obstacle_avoidance_params(idx, params)
+
+    def get_obstacle_avoidance_params(self, idx: int) -> Dict[str, float]:
+        """
+        Get obstacle avoidance parameters.
+
+        Args:
+            idx: Profile index (0-7)
+
+        Returns:
+            Avoidance parameters dictionary
+        """
+        return self._navmesh.get_obstacle_avoidance_params(idx)
+
+    def set_query_filter_area_cost(self, filter_index: int, area_id: int, cost: float) -> None:
+        """
+        Set area traversal cost for query filter.
+
+        Args:
+            filter_index: Filter index (0-15)
+            area_id: Area type (POLYAREA_*)
+            cost: Traversal cost multiplier
+
+        Example:
+            # Make water expensive for infantry
+            navmesh.set_query_filter_area_cost(0, POLYAREA_WATER, 10.0)
+        """
+        self._navmesh.set_query_filter_area_cost(filter_index, area_id, cost)
+
+    def get_query_filter_area_cost(self, filter_index: int, area_id: int) -> float:
+        """
+        Get area cost for query filter.
+
+        Args:
+            filter_index: Filter index (0-15)
+            area_id: Area type (POLYAREA_*)
+
+        Returns:
+            Area cost
+        """
+        return self._navmesh.get_query_filter_area_cost(filter_index, area_id)
+
+    def set_query_filter_include_flags(self, filter_index: int, flags: int) -> None:
+        """
+        Set required capability flags for query filter.
+
+        Args:
+            filter_index: Filter index (0-15)
+            flags: Capability flags (POLYFLAGS_*)
+
+        Example:
+            # Infantry can walk and jump
+            navmesh.set_query_filter_include_flags(0, POLYFLAGS_WALK | POLYFLAGS_JUMP)
+        """
+        self._navmesh.set_query_filter_include_flags(filter_index, flags)
+
+    def set_query_filter_exclude_flags(self, filter_index: int, flags: int) -> None:
+        """
+        Set excluded capability flags for query filter.
+
+        Args:
+            filter_index: Filter index (0-15)
+            flags: Capability flags to exclude (POLYFLAGS_*)
+        """
+        self._navmesh.set_query_filter_exclude_flags(filter_index, flags)
+
+    def get_agent_neighbors(self, agent_idx: int) -> List[int]:
+        """
+        Get neighboring agent indices.
+
+        Args:
+            agent_idx: Agent index
+
+        Returns:
+            List of neighbor agent indices
+        """
+        return self._navmesh.get_agent_neighbors(agent_idx)
+
+    def get_agent_corners(self, agent_idx: int) -> List[Tuple[float, float, float]]:
+        """
+        Get path corner points for agent.
+
+        Args:
+            agent_idx: Agent index
+
+        Returns:
+            List of corner positions [(x,y,z), ...]
+        """
+        corners_flat = self._navmesh.get_agent_corners(agent_idx)
+        if not corners_flat:
+            return []
+        count = len(corners_flat) // 3
+        return [(corners_flat[3*i], corners_flat[3*i+1], corners_flat[3*i+2])
+                for i in range(count)]
+
+    def get_active_agents(self) -> List[int]:
+        """
+        Get all active agent indices.
+
+        Returns:
+            List of active agent indices
+        """
+        return self._navmesh.get_active_agents()
+
+    def get_max_agent_count(self) -> int:
+        """
+        Get maximum agent count.
+
+        Returns:
+            Maximum number of agents
+        """
+        return self._navmesh.get_max_agent_count()
+
+    def get_query_half_extents(self) -> Tuple[float, float, float]:
+        """
+        Get query half extents.
+
+        Returns:
+            Half extents as (x, y, z)
+        """
+        extents = self._navmesh.get_query_half_extents()
+        return (extents[0], extents[1], extents[2])
+
+    def is_agent_active(self, idx: int) -> bool:
+        """
+        Check if agent is active.
+
+        Args:
+            idx: Agent index
+
+        Returns:
+            True if agent is active
+        """
+        return self._navmesh.is_agent_active(idx)
+
+    def get_agent_parameters(self, idx: int) -> Dict[str, Any]:
+        """
+        Get agent's current parameters.
+
+        Args:
+            idx: Agent index
+
+        Returns:
+            Dictionary with agent parameters
+        """
+        return self._navmesh.get_agent_parameters(idx)
+
+    # ========================================================================
+    # FORMATIONS & GROUP BEHAVIORS (NEW v1.1.0)
+    # ========================================================================
+
+    def create_formation(self, formation_type: int, spacing: float) -> int:
+        """
+        Create a new formation group.
+
+        Args:
+            formation_type: Formation type:
+                0 = Line (agents in a horizontal line)
+                1 = Column (agents in a vertical column)
+                2 = Wedge (V-shaped formation)
+                3 = Box (rectangular grid)
+                4 = Circle (circular arrangement)
+            spacing: Distance between agents in meters
+
+        Returns:
+            Formation ID, or -1 on failure
+
+        Example:
+            # Create line formation with 2m spacing
+            formation_id = navmesh.create_formation(0, 2.0)
+        """
+        return self._navmesh.create_formation(formation_type, spacing)
+
+    def delete_formation(self, formation_id: int) -> None:
+        """
+        Delete a formation group.
+
+        Args:
+            formation_id: Formation ID
+        """
+        self._navmesh.delete_formation(formation_id)
+
+    def add_agent_to_formation(self, formation_id: int, agent_idx: int) -> bool:
+        """
+        Add an agent to a formation.
+
+        Args:
+            formation_id: Formation ID
+            agent_idx: Agent index
+
+        Returns:
+            True if successful
+
+        Example:
+            formation_id = navmesh.create_formation(0, 2.0)
+            agent_id = navmesh.add_agent((10, 0, 10), params)
+            navmesh.add_agent_to_formation(formation_id, agent_id)
+        """
+        return self._navmesh.add_agent_to_formation(formation_id, agent_idx)
+
+    def remove_agent_from_formation(self, agent_idx: int) -> bool:
+        """
+        Remove an agent from its formation.
+
+        Args:
+            agent_idx: Agent index
+
+        Returns:
+            True if agent was in a formation and removed
+        """
+        return self._navmesh.remove_agent_from_formation(agent_idx)
+
+    def set_formation_target(
+        self,
+        formation_id: int,
+        target_pos: Tuple[float, float, float],
+        target_dir: Tuple[float, float, float]
+    ) -> None:
+        """
+        Set target position and direction for formation.
+
+        Args:
+            formation_id: Formation ID
+            target_pos: Target position (x, y, z)
+            target_dir: Target facing direction (x, y, z) - will be normalized
+
+        Example:
+            # Move formation to (50, 0, 50) facing north
+            navmesh.set_formation_target(formation_id, (50, 0, 50), (0, 0, 1))
+        """
+        self._navmesh.set_formation_target(
+            formation_id,
+            list(target_pos),
+            list(target_dir)
+        )
+
+    def set_formation_leader(self, formation_id: int, agent_idx: int) -> None:
+        """
+        Set the leader of a formation.
+
+        Args:
+            formation_id: Formation ID
+            agent_idx: Agent index (must be in formation)
+
+        Note:
+            The leader's position can be used for formation calculations.
+        """
+        self._navmesh.set_formation_leader(formation_id, agent_idx)
+
+    def get_formation_agents(self, formation_id: int) -> List[int]:
+        """
+        Get list of agent indices in a formation.
+
+        Args:
+            formation_id: Formation ID
+
+        Returns:
+            List of agent indices
+        """
+        return self._navmesh.get_formation_agents(formation_id)
+
+    def get_formation_info(self, formation_id: int) -> Dict[str, float]:
+        """
+        Get information about a formation.
+
+        Args:
+            formation_id: Formation ID
+
+        Returns:
+            Dictionary with formation info:
+                - id: Formation ID
+                - type: Formation type (0-4)
+                - spacing: Agent spacing
+                - leader_idx: Leader agent index (-1 if none)
+                - agent_count: Number of agents
+                - has_target: Whether formation has a target (0 or 1)
+                - target_x, target_y, target_z: Target position
+                - dir_x, dir_y, dir_z: Target direction
+        """
+        return self._navmesh.get_formation_info(formation_id)
+
+    def update_formations(self, dt: float) -> None:
+        """
+        Update all formations and set agent targets.
+
+        Args:
+            dt: Delta time in seconds
+
+        Note:
+            Call this each frame to update formation positions.
+            This automatically sets targets for all agents in formations.
+
+        Example:
+            # In game loop
+            navmesh.update_crowd(dt)
+            navmesh.update_formations(dt)
+        """
+        self._navmesh.update_formations(dt)
+
+    def get_formation_count(self) -> int:
+        """
+        Get total number of formations.
+
+        Returns:
+            Formation count
+        """
+        return self._navmesh.get_formation_count()
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def create_default_agent_params() -> Dict[str, Any]:
+    """
+    Create a dictionary with default agent parameters for crowd simulation.
+
+    Returns:
+        dict: Default agent parameters
+
+    Example:
+        params = create_default_agent_params()
+        params["maxSpeed"] = 5.0  # Override specific values
+        agent_id = navmesh.add_agent((0, 0, 0), params)
+    """
+    return {
+        "radius": 0.6,
+        "height": 2.0,
+        "maxAcceleration": 8.0,
+        "maxSpeed": 3.5,
+        "collisionQueryRange": 7.2,  # radius * 12
+        "pathOptimizationRange": 18.0,  # radius * 30
+        "separationWeight": 2.0,
+        "updateFlags": CROWD_ANTICIPATE_TURNS | CROWD_OPTIMIZE_VIS | CROWD_OPTIMIZE_TOPO | CROWD_OBSTACLE_AVOIDANCE,
+        "obstacleAvoidanceType": 3,
+        "queryFilterType": 0
+    }
+
+
+def create_vehicle_params() -> Dict[str, Any]:
+    """
+    Create a dictionary with default vehicle parameters.
+    Vehicle agents have larger radius, higher speeds, and different movement characteristics.
+
+    Returns:
+        dict: Default vehicle parameters
+
+    Example:
+        vehicle_params = create_vehicle_params()
+        vehicle_id = navmesh.add_agent((10, 0, 10), vehicle_params)
+    """
+    return {
+        "radius": 2.5,
+        "height": 2.0,
+        "maxSpeed": 15.0,
+        "maxAcceleration": 3.0,
+        "collisionQueryRange": 30.0,
+        "pathOptimizationRange": 75.0,
+        "separationWeight": 3.0,
+        "updateFlags": CROWD_ANTICIPATE_TURNS | CROWD_OBSTACLE_AVOIDANCE
+    }
+
+
+def create_obstacle_avoidance_params(profile: str = "default") -> Dict[str, float]:
+    """
+    Create obstacle avoidance parameters for different behavior profiles.
+
+    Args:
+        profile: One of "default", "aggressive", "passive", "defensive"
+
+    Returns:
+        dict: Obstacle avoidance parameters
+
+    Profiles:
+        - default: Balanced behavior
+        - aggressive: More direct pathfinding, less cautious
+        - passive: More cautious, avoids other agents more
+        - defensive: Very cautious, maintains large distances
+
+    Example:
+        # Set up aggressive avoidance for soldiers
+        navmesh.set_obstacle_avoidance_params(0, create_obstacle_avoidance_params("aggressive"))
+
+        # Agent uses profile 0
+        agent_params = create_default_agent_params()
+        agent_params["obstacleAvoidanceType"] = 0
+        soldier_id = navmesh.add_agent((5, 0, 5), agent_params)
+    """
+    profiles = {
+        "default": {
+            "velBias": 0.4,
+            "weightDesVel": 2.0,
+            "weightCurVel": 0.75,
+            "weightSide": 0.75,
+            "weightToi": 2.5,
+            "horizTime": 2.5,
+            "gridSize": 33,
+            "adaptiveDivs": 7,
+            "adaptiveRings": 2,
+            "adaptiveDepth": 5
+        },
+        "aggressive": {
+            "velBias": 0.5,
+            "weightDesVel": 2.5,
+            "weightCurVel": 1.0,
+            "weightSide": 0.5,
+            "weightToi": 3.0,
+            "horizTime": 2.0,
+            "gridSize": 33,
+            "adaptiveDivs": 7,
+            "adaptiveRings": 3,
+            "adaptiveDepth": 6
+        },
+        "passive": {
+            "velBias": 0.3,
+            "weightDesVel": 1.0,
+            "weightCurVel": 0.5,
+            "weightSide": 1.0,
+            "weightToi": 1.5,
+            "horizTime": 3.5,
+            "gridSize": 20,
+            "adaptiveDivs": 5,
+            "adaptiveRings": 2,
+            "adaptiveDepth": 3
+        },
+        "defensive": {
+            "velBias": 0.2,
+            "weightDesVel": 1.0,
+            "weightCurVel": 0.3,
+            "weightSide": 1.5,
+            "weightToi": 1.0,
+            "horizTime": 4.0,
+            "gridSize": 25,
+            "adaptiveDivs": 6,
+            "adaptiveRings": 2,
+            "adaptiveDepth": 4
+        }
+    }
+
+    return profiles.get(profile, profiles["default"])
+
+
+def setup_query_filter_infantry(navmesh: Navmesh, filter_index: int = 0) -> None:
+    """
+    Configure a query filter for infantry units (can walk, cannot swim).
+
+    Args:
+        navmesh: Navmesh instance
+        filter_index: Filter index to configure (0-15)
+
+    Example:
+        setup_query_filter_infantry(navmesh, 0)
+
+        agent_params = create_default_agent_params()
+        agent_params["queryFilterType"] = 0
+        infantry_id = navmesh.add_agent((5, 0, 5), agent_params)
+    """
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_GROUND, 1.0)
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_ROAD, 0.5)    # Prefer roads
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_GRASS, 1.5)   # Grass slows down
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_WATER, 10.0)  # Avoid water
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_DANGER, 5.0)  # Avoid danger
+    navmesh.set_query_filter_include_flags(filter_index, POLYFLAGS_WALK | POLYFLAGS_JUMP | POLYFLAGS_DOOR)
+    navmesh.set_query_filter_exclude_flags(filter_index, POLYFLAGS_SWIM | POLYFLAGS_DISABLED)
+
+
+def setup_query_filter_amphibious(navmesh: Navmesh, filter_index: int = 1) -> None:
+    """
+    Configure a query filter for amphibious units (can walk and swim).
+
+    Args:
+        navmesh: Navmesh instance
+        filter_index: Filter index to configure (0-15)
+
+    Example:
+        setup_query_filter_amphibious(navmesh, 1)
+
+        agent_params = create_default_agent_params()
+        agent_params["queryFilterType"] = 1
+        amphibious_id = navmesh.add_agent((5, 0, 5), agent_params)
+    """
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_GROUND, 1.0)
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_ROAD, 0.8)
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_WATER, 0.7)   # Prefer water
+    navmesh.set_query_filter_area_cost(filter_index, POLYAREA_DANGER, 5.0)
+    navmesh.set_query_filter_include_flags(filter_index, POLYFLAGS_WALK | POLYFLAGS_SWIM | POLYFLAGS_JUMP)
+    navmesh.set_query_filter_exclude_flags(filter_index, POLYFLAGS_DISABLED)
+
+
+def setup_query_filter_flying(navmesh: Navmesh, filter_index: int = 2) -> None:
+    """
+    Configure a query filter for flying units (ignores terrain type).
+
+    Args:
+        navmesh: Navmesh instance
+        filter_index: Filter index to configure (0-15)
+
+    Example:
+        setup_query_filter_flying(navmesh, 2)
+
+        agent_params = create_default_agent_params()
+        agent_params["queryFilterType"] = 2
+        flying_id = navmesh.add_agent((5, 5, 5), agent_params)
+    """
+    # All areas have same cost for flying units
+    for area in range(8):
+        navmesh.set_query_filter_area_cost(filter_index, area, 1.0)
+    navmesh.set_query_filter_include_flags(filter_index, POLYFLAGS_ALL)
+    navmesh.set_query_filter_exclude_flags(filter_index, POLYFLAGS_DISABLED)
+
+
+# ============================================================================
+# EXPORTS
+# ============================================================================
 
 __all__ = [
+    # Core class
     'Navmesh',
+
+    # Helper functions
     'create_default_agent_params',
+    'create_vehicle_params',
+    'create_obstacle_avoidance_params',
+    'setup_query_filter_infantry',
+    'setup_query_filter_amphibious',
+    'setup_query_filter_flying',
+
+    # Crowd constants
     'CROWD_ANTICIPATE_TURNS',
     'CROWD_OBSTACLE_AVOIDANCE',
     'CROWD_SEPARATION',
     'CROWD_OPTIMIZE_VIS',
     'CROWD_OPTIMIZE_TOPO',
+
+    # Agent states
     'CROWDAGENT_STATE_INVALID',
     'CROWDAGENT_STATE_WALKING',
     'CROWDAGENT_STATE_OFFMESH',
+
+    # Target states
     'CROWDAGENT_TARGET_NONE',
     'CROWDAGENT_TARGET_FAILED',
     'CROWDAGENT_TARGET_VALID',
@@ -582,7 +1350,37 @@ __all__ = [
     'CROWDAGENT_TARGET_WAITING_FOR_QUEUE',
     'CROWDAGENT_TARGET_WAITING_FOR_PATH',
     'CROWDAGENT_TARGET_VELOCITY',
+
+    # Partition types
     'PARTITION_WATERSHED',
     'PARTITION_MONOTONE',
-    'PARTITION_LAYERS'
+    'PARTITION_LAYERS',
+
+    # Area types
+    'POLYAREA_GROUND',
+    'POLYAREA_WATER',
+    'POLYAREA_ROAD',
+    'POLYAREA_DOOR',
+    'POLYAREA_GRASS',
+    'POLYAREA_JUMP',
+    'POLYAREA_CLIMB',
+    'POLYAREA_DANGER',
+
+    # Poly flags
+    'POLYFLAGS_WALK',
+    'POLYFLAGS_SWIM',
+    'POLYFLAGS_DOOR',
+    'POLYFLAGS_JUMP',
+    'POLYFLAGS_CLIMB',
+    'POLYFLAGS_DISABLED',
+    'POLYFLAGS_ALL',
+
+    # Formation types
+    'FORMATION_LINE',
+    'FORMATION_COLUMN',
+    'FORMATION_WEDGE',
+    'FORMATION_BOX',
+    'FORMATION_CIRCLE',
 ]
+
+__version__ = "1.1.0"

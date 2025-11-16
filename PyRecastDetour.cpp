@@ -60,6 +60,57 @@ PYBIND11_MODULE(Py310RecastDetour, m)
 		.def("get_agent_velocity", &Navmesh::get_agent_velocity, py::arg("idx"))
 		.def("get_agent_state", &Navmesh::get_agent_state, py::arg("idx"))
 		.def("get_agent_count", &Navmesh::get_agent_count)
-		.def("update_agent_parameters", &Navmesh::update_agent_parameters, py::arg("idx"), py::arg("params"));
+		.def("update_agent_parameters", &Navmesh::update_agent_parameters, py::arg("idx"), py::arg("params"))
+
+		// Crowd Advanced Features
+		.def("set_obstacle_avoidance_params", &Navmesh::set_obstacle_avoidance_params, py::arg("idx"), py::arg("params"))
+		.def("get_obstacle_avoidance_params", &Navmesh::get_obstacle_avoidance_params, py::arg("idx"))
+		.def("set_query_filter_area_cost", &Navmesh::set_query_filter_area_cost, py::arg("filter_index"), py::arg("area_id"), py::arg("cost"))
+		.def("get_query_filter_area_cost", &Navmesh::get_query_filter_area_cost, py::arg("filter_index"), py::arg("area_id"))
+		.def("set_query_filter_include_flags", &Navmesh::set_query_filter_include_flags, py::arg("filter_index"), py::arg("flags"))
+		.def("set_query_filter_exclude_flags", &Navmesh::set_query_filter_exclude_flags, py::arg("filter_index"), py::arg("flags"))
+		.def("get_agent_neighbors", &Navmesh::get_agent_neighbors, py::arg("agent_idx"))
+		.def("get_agent_corners", &Navmesh::get_agent_corners, py::arg("agent_idx"))
+		.def("get_active_agents", &Navmesh::get_active_agents)
+		.def("get_max_agent_count", &Navmesh::get_max_agent_count)
+		.def("get_query_half_extents", &Navmesh::get_query_half_extents)
+		.def("is_agent_active", &Navmesh::is_agent_active, py::arg("idx"))
+		.def("get_agent_parameters", &Navmesh::get_agent_parameters, py::arg("idx"))
+
+		// Convex Volumes
+		.def("add_convex_volume", &Navmesh::add_convex_volume, py::arg("verts"), py::arg("minh"), py::arg("maxh"), py::arg("area"))
+		.def("delete_convex_volume", &Navmesh::delete_convex_volume, py::arg("index"))
+		.def("get_convex_volume_count", &Navmesh::get_convex_volume_count)
+		.def("get_convex_volume", &Navmesh::get_convex_volume, py::arg("index"))
+		.def("get_all_convex_volumes", &Navmesh::get_all_convex_volumes)
+
+		// Off-Mesh Connections
+		.def("add_offmesh_connection", &Navmesh::add_offmesh_connection,
+		     py::arg("start_pos"), py::arg("end_pos"), py::arg("radius"),
+		     py::arg("bidirectional"), py::arg("area"), py::arg("flags"))
+		.def("delete_offmesh_connection", &Navmesh::delete_offmesh_connection, py::arg("index"))
+		.def("get_offmesh_connection_count", &Navmesh::get_offmesh_connection_count)
+		.def("get_offmesh_connection", &Navmesh::get_offmesh_connection, py::arg("index"))
+		.def("get_all_offmesh_connections", &Navmesh::get_all_offmesh_connections)
+
+		// Auto-Markup System
+		.def("mark_walkable_triangles", &Navmesh::mark_walkable_triangles, py::arg("walkable_slope_angle"))
+		.def("mark_box_area", &Navmesh::mark_box_area, py::arg("bmin"), py::arg("bmax"), py::arg("area_id"))
+		.def("mark_cylinder_area", &Navmesh::mark_cylinder_area, py::arg("pos"), py::arg("radius"), py::arg("height"), py::arg("area_id"))
+		.def("mark_convex_poly_area", &Navmesh::mark_convex_poly_area, py::arg("verts"), py::arg("hmin"), py::arg("hmax"), py::arg("area_id"))
+		.def("erode_walkable_area", &Navmesh::erode_walkable_area, py::arg("radius"))
+		.def("median_filter_walkable_area", &Navmesh::median_filter_walkable_area)
+
+		// Formations & Group Behaviors
+		.def("create_formation", &Navmesh::create_formation, py::arg("formation_type"), py::arg("spacing"))
+		.def("delete_formation", &Navmesh::delete_formation, py::arg("formation_id"))
+		.def("add_agent_to_formation", &Navmesh::add_agent_to_formation, py::arg("formation_id"), py::arg("agent_idx"))
+		.def("remove_agent_from_formation", &Navmesh::remove_agent_from_formation, py::arg("agent_idx"))
+		.def("set_formation_target", &Navmesh::set_formation_target, py::arg("formation_id"), py::arg("target_pos"), py::arg("target_dir"))
+		.def("set_formation_leader", &Navmesh::set_formation_leader, py::arg("formation_id"), py::arg("agent_idx"))
+		.def("get_formation_agents", &Navmesh::get_formation_agents, py::arg("formation_id"))
+		.def("get_formation_info", &Navmesh::get_formation_info, py::arg("formation_id"))
+		.def("update_formations", &Navmesh::update_formations, py::arg("dt"))
+		.def("get_formation_count", &Navmesh::get_formation_count);
 }
 #endif // !_MAIN_APP
